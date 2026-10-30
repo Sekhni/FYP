@@ -1,0 +1,47 @@
+# Unity project .gitignore - place at the project root (next to Assets/)
+
+# Generated folders (large, rebuilt by Unity)
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Keep .meta files for everything in Assets
+!/[Aa]ssets/**/*.meta
+
+# IDE files
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.unityproj
+*.tmp
+
+# Build outputs
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# Misc
+sysinfo.txt
+crashlytics-build.properties
+.DS_Store
+Thumbs.db
