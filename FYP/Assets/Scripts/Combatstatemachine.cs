@@ -11,8 +11,10 @@ public enum CombatState
 }
 
 /// <summary>
-/// Minimal combat state machine for Blade & Reflex (Month 1).
-/// Left mouse button starts a light attack. Three Animation Events on the
+/// Minimal combat state machine for Blade & Reflex.
+/// Left mouse button starts a light attack.
+/// Hold right mouse button (gamepad: left bumper) to block. You can't attack
+/// while blocking, and rolling (PlayerController) drops the block. Three Animation Events on the
 /// attack clip move the state forward:
 ///     ActiveStart  ->  Active
 ///     ActiveEnd    ->  Recovery
@@ -33,6 +35,9 @@ public class CombatStateMachine : MonoBehaviour
     [SerializeField] private bool logStateChanges = true;
 
     private static readonly int AttackLightHash = Animator.StringToHash("AttackLight");
+    private static readonly int BlockingHash = Animator.StringToHash("Blocking");
+
+    private PlayerController mover;
 
     private float timeInState;
 
@@ -44,17 +49,25 @@ public class CombatStateMachine : MonoBehaviour
     /// <summary>True only while the blade is allowed to hit something.</summary>
     public bool IsAttackActive => State == CombatState.Active;
 
+    /// <summary>True while the guard is up.</summary>
+    public bool IsBlocking { get; private set; }
+
     public event Action<CombatState> StateChanged;
 
     private void Awake()
     {
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
+
+        mover = GetComponent<PlayerController>();
     }
 
     private void Update()
     {
-        if (State == CombatState.Idle)
+        bool dodging = mover != null && mover.IsDodging;
+        UpdateBlock(dodging);
+
+        if (State == CombatState.Idle && !IsBlocking && !dodging)
         {
             Mouse mouse = Mouse.current;
             if (mouse != null && mouse.leftButton.wasPressedThisFrame)
@@ -72,9 +85,27 @@ public class CombatStateMachine : MonoBehaviour
         }
     }
 
+    private void UpdateBlock(bool dodging)
+    {
+        Mouse mouse = Mouse.current;
+        Gamepad pad = Gamepad.current;
+        bool held = (mouse != null && mouse.rightButton.isPressed)
+                 || (pad != null && pad.leftShoulder.isPressed);
+
+        bool blocking = held && State == CombatState.Idle && !dodging;
+        if (blocking == IsBlocking)
+            return;
+
+        IsBlocking = blocking;
+        if (animator != null)
+            animator.SetBool(BlockingHash, blocking);
+        if (logStateChanges)
+            Debug.Log($"[Combat] {name} block {(blocking ? "up" : "down")}");
+    }
+
     public bool TryLightAttack()
     {
-        if (State != CombatState.Idle)
+        if (State != CombatState.Idle || IsBlocking)
             return false;
 
         SetState(CombatState.Windup);

@@ -131,6 +131,7 @@ GameObject:
   - component: {fileID: 330585545}
   - component: {fileID: 330585544}
   - component: {fileID: 330585547}
+  - component: {fileID: 330585548}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -256,6 +257,35 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &330585548
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330585543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b4030a87431d2c4ca07703cda26791f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ThirdPersonCamera
+  Target: {fileID: 1646528644}
+  distance: 4
+  lookHeight: 1.5
+  shoulderOffset: 0.5
+  mouseSensitivity: 0.1
+  stickTiltSpeed: 90
+  minPitch: -20
+  maxPitch: 60
+  startPitch: 15
+  invertY: 0
+  yawSmoothTime: 0.05
+  followSmoothTime: 0.05
+  avoidWalls: 1
+  wallPadding: 0.2
+  wallLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
@@ -498,7 +528,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: c2e40fa84d53ccd428f640eac126b1fb, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -540,7 +570,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 4.40859, y: 4.40859, z: 4.40859}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -559,7 +589,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: 0.039
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
       propertyPath: m_LocalPosition.z
@@ -651,10 +681,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1be7c97b2d540354aa45b21e122a8c99, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
-  walkSpeed: 2
-  runSpeed: 4.5
-  turnSpeed: 720
+  walkSpeed: 1.43
+  runSpeed: 3.95
+  accelerationTime: 0.15
+  decelerationTime: 0.1
   gravity: -20
+  attackStepScale: 0.5
+  rollDuration: 1.05
+  rollDistanceScale: 1
+  mouseSensitivity: 0.15
+  keyTurnSpeed: 180
+  backwardSpeedFactor: 0.8
+  lockCursor: 1
+  stickDeadZone: 0.15
   animator: {fileID: 0}
   cameraTransform: {fileID: 0}
 --- !u!143 &1646528642
@@ -682,6 +721,11 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
   m_Center: {x: 0, y: 0.9, z: 0}
+--- !u!4 &1646528644 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
