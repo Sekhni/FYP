@@ -72,9 +72,14 @@ public class TrainingDummy : MonoBehaviour
 
     private void Start()
     {
-        PlayerController pc = FindFirstObjectByType<PlayerController>();
-        if (pc != null)
-            player = pc.GetComponent<Health>();
+        PlayerController pc = FindAnyObjectByType<PlayerController>();
+        if (pc == null)
+        {
+            Debug.LogWarning("TrainingDummy: no PlayerController found in the scene, so the dummy has nothing to attack.");
+            return;
+        }
+
+        player = pc.GetComponent<Health>();
         if (player == null)
             Debug.LogWarning("TrainingDummy: the Player has no Health component, so the dummy's swings can't hurt it.");
     }

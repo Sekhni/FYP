@@ -13,7 +13,7 @@ public static class TrainingDummyMenu
     [MenuItem("Tools/Blade and Reflex/Add Training Dummy")]
     private static void AddTrainingDummy()
     {
-        PlayerController player = Object.FindFirstObjectByType<PlayerController>();
+        PlayerController player = Object.FindAnyObjectByType<PlayerController>();
 
         // ---- Player health ----
         if (player != null && player.GetComponent<Health>() == null)
