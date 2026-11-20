@@ -1,13 +1,19 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Player movement for Blade & Reflex.
+/// Player movement and lock-on for Blade & Reflex.
 /// - Turn with the mouse OR with A / D (gamepad: right stick or left stick sideways).
-///   The camera (ThirdPersonCamera) sits behind the player and follows.
-/// - W walks forward, S walks backward (the walk clip plays in reverse).
+///   The camera (LockOnCamera) sits behind the player and follows.
+/// - W walks forward, S walks backward.
 ///   The gamepad left stick gives analogue speed.
 /// - Hold Left Shift (or click the left stick) to run forward.
+/// - Tab (gamepad: click the right stick) locks on to the enemy nearest the
+///   middle of the view, and again to let go. While locked on the player
+///   always faces the target: W / S walk towards and away from it, A / D
+///   strafe around it, and there is no running. The lock breaks if the target
+///   dies, is disabled, or gets further than lockOnBreakRange away.
 /// - Space rolls in the direction you are pressing (forward if nothing is
 ///   pressed).
 /// - While blocking (right mouse, handled by CombatStateMachine) you can turn
@@ -15,9 +21,11 @@ using UnityEngine.InputSystem;
 /// - The mouse cursor is locked to the game window. Esc frees it, click to lock again.
 /// - Speed builds up and falls off over a short time, so movement feels weighty
 ///   instead of snapping on and off.
-/// - The Animator's "Speed" float is the real ground speed in metres per second.
-///   The Locomotion blend tree thresholds (0 / 1.43 / 3.95) are the speeds the
-///   Idle / Walk / Run clips actually travel at, so the feet don't slide.
+/// - The Animator's "MoveX" / "MoveZ" floats are the real ground velocity in
+///   metres per second, sideways and forwards relative to the player. The
+///   Locomotion 2D blend tree places each clip at the speed it actually
+///   travels (walk 1.43 forward, run 3.95, back 1.09, strafe 1.19 right /
+///   1.05 left), so the feet don't slide. "Speed" is the overall ground speed.
 /// - No root motion is used anywhere. Rolls and attacks are moved by this
 ///   script: each frame it reads how far through its animation the player is
 ///   (Animator normalizedTime, which already includes the state's playback
@@ -25,7 +33,6 @@ using UnityEngine.InputSystem;
 ///   So the movement always lasts exactly as long as the animation plays,
 ///   even if you change the clip or its speed. The progress curves describe
 ///   how the distance is spread over the animation (measured from the clips).
-/// Lock-on strafing is added later.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
@@ -64,11 +71,27 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float mouseSensitivity = 0.15f;
     [Tooltip("Degrees per second when turning with A / D or a stick.")]
     [SerializeField] private float keyTurnSpeed = 180f;
-    [Tooltip("Backward walking speed as a fraction of walk speed. No running backward.")]
+    [Tooltip("Backward walking speed as a fraction of walk speed. No running backward. " +
+             "The walk-back clip travels at about 1.09 m/s (0.76 of walk speed).")]
     [Range(0.3f, 1f)]
     [SerializeField] private float backwardSpeedFactor = 0.8f;
     [Tooltip("Lock and hide the mouse cursor while playing.")]
     [SerializeField] private bool lockCursor = true;
+
+    [Header("Lock-on (Tab / right stick click)")]
+    [Tooltip("Only targets this close can be locked on to, in metres.")]
+    [SerializeField] private float lockOnRange = 15f;
+    [Tooltip("The lock breaks when the target gets further away than this, in metres.")]
+    [SerializeField] private float lockOnBreakRange = 20f;
+    [Tooltip("Only targets within this many degrees of the camera's view direction can be picked.")]
+    [Range(10f, 180f)]
+    [SerializeField] private float lockOnMaxAngle = 70f;
+    [Tooltip("Height above the target's feet that the camera and reticle aim at, in metres.")]
+    [SerializeField] private float lockPointHeight = 1.2f;
+    [Tooltip("Sideways speed while locked on, in metres per second. The strafe clips travel at 1.05-1.19 m/s.")]
+    [SerializeField] private float strafeSpeed = 1.1f;
+    [Tooltip("Degrees per second the player turns to keep facing the target.")]
+    [SerializeField] private float lockTurnSpeed = 540f;
 
     [Header("Input")]
     [Tooltip("Gamepad stick values below this are ignored.")]
@@ -76,10 +99,10 @@ public class PlayerController : MonoBehaviour
 
     [Header("References (auto-filled if left empty)")]
     [SerializeField] private Animator animator;
-    [SerializeField] private Transform cameraTransform;
 
     private static readonly int SpeedHash = Animator.StringToHash("Speed");
-    private static readonly int MoveDirectionHash = Animator.StringToHash("MoveDirection");
+    private static readonly int MoveXHash = Animator.StringToHash("MoveX");
+    private static readonly int MoveZHash = Animator.StringToHash("MoveZ");
     private static readonly int DodgeHash = Animator.StringToHash("Dodge");
 
     private CharacterController controller;
@@ -104,6 +127,19 @@ public class PlayerController : MonoBehaviour
     /// <summary>True while a roll is playing.</summary>
     public bool IsDodging => rolling;
 
+    /// <summary>The body the player is locked on to, or null.</summary>
+    public HitBody LockTarget { get; private set; }
+
+    public bool IsLockedOn => LockTarget != null;
+
+    /// <summary>The point on the target the camera and reticle aim at.</summary>
+    public Vector3 LockPoint => LockTarget != null
+        ? LockTarget.transform.position + Vector3.up * lockPointHeight
+        : transform.position;
+
+    /// <summary>Raised when the lock-on target changes (null = lock released).</summary>
+    public event Action<HitBody> LockTargetChanged;
+
     private bool IsAttacking => combat != null && !combat.CanMove;
     private bool IsBlocking => combat != null && combat.IsBlocking;
 
@@ -114,19 +150,6 @@ public class PlayerController : MonoBehaviour
 
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
-
-        if (cameraTransform == null && Camera.main != null)
-            cameraTransform = Camera.main.transform;
-
-        // Make sure the camera follows the player.
-        if (cameraTransform != null)
-        {
-            ThirdPersonCamera follow = cameraTransform.GetComponent<ThirdPersonCamera>();
-            if (follow == null)
-                follow = cameraTransform.gameObject.AddComponent<ThirdPersonCamera>();
-            if (follow.Target == null)
-                follow.Target = transform;
-        }
 
         yaw = transform.eulerAngles.y;
 
@@ -144,8 +167,9 @@ public class PlayerController : MonoBehaviour
     private void Update()
     {
         UpdateCursorLock();
+        UpdateLockOn();
 
-        Vector2 input = ReadMoveInput();   // x = turn (A/D), y = forward/back (W/S)
+        Vector2 input = ReadMoveInput();   // x = turn or strafe (A/D), y = forward/back (W/S)
 
         // ---- Roll ----
         if (rolling)
@@ -156,22 +180,35 @@ public class PlayerController : MonoBehaviour
         // ---- Attack step ----
         UpdateAttackStep();
 
-        // ---- Turn with mouse and A/D (not mid-attack or mid-roll: you commit to it) ----
+        // ---- Turn (not mid-attack or mid-roll: you commit to it) ----
+        // Free: mouse and A/D turn the player. Locked on: face the target.
         if (!IsAttacking && !IsDodging)
         {
-            yaw += ReadMouseTurn() + input.x * keyTurnSpeed * Time.deltaTime;
+            if (IsLockedOn)
+            {
+                Vector3 toTarget = LockTarget.transform.position - transform.position;
+                toTarget.y = 0f;
+                if (toTarget.sqrMagnitude > 0.0001f)
+                {
+                    float targetYaw = Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
+                    yaw = Mathf.MoveTowardsAngle(yaw, targetYaw, lockTurnSpeed * Time.deltaTime);
+                }
+            }
+            else
+            {
+                yaw += ReadMouseTurn() + input.x * keyTurnSpeed * Time.deltaTime;
+            }
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         }
 
-        bool backward = input.y < 0f;
-        bool running = IsRunHeld() && !backward;
-        float speed = backward ? walkSpeed * backwardSpeedFactor
-                    : running  ? runSpeed
-                    :            walkSpeed;
-        Vector3 moveDir = transform.forward * input.y;   // magnitude 0..1, sign = direction
-
         // ---- Horizontal movement ----
-        Vector3 targetVelocity = moveDir * speed;
+        bool backward = input.y < 0f;
+        float forwardSpeed = backward ? walkSpeed * backwardSpeedFactor
+                           : IsRunHeld() && !IsLockedOn ? runSpeed
+                           : walkSpeed;
+        Vector3 targetVelocity = transform.forward * (input.y * forwardSpeed);
+        if (IsLockedOn)
+            targetVelocity += transform.right * (input.x * strafeSpeed);   // A/D strafe around the target
 
         if (IsAttacking || IsDodging || IsBlocking)
         {
@@ -198,16 +235,91 @@ public class PlayerController : MonoBehaviour
         velocity.y = verticalVelocity;
         controller.Move(velocity * Time.deltaTime);
 
-        // ---- Drive the animator with the real ground speed ----
+        // ---- Drive the animator with the real ground velocity ----
         if (animator != null)
         {
-            float animSpeed = horizontalVelocity.magnitude;
-            animator.SetFloat(SpeedHash, animSpeed, 0.05f, Time.deltaTime);
-
-            // 1 = clips play forward, -1 = play in reverse (walking backward)
-            bool movingBack = Vector3.Dot(horizontalVelocity, transform.forward) < -0.05f;
-            animator.SetFloat(MoveDirectionHash, movingBack ? -1f : 1f);
+            Vector3 local = transform.InverseTransformDirection(horizontalVelocity);
+            animator.SetFloat(SpeedHash, horizontalVelocity.magnitude, 0.05f, Time.deltaTime);
+            animator.SetFloat(MoveXHash, local.x, 0.05f, Time.deltaTime);
+            animator.SetFloat(MoveZHash, local.z, 0.05f, Time.deltaTime);
         }
+    }
+
+    // ---------------------------------------------------------------- Lock-on
+
+    private void UpdateLockOn()
+    {
+        // Let go of a target that has died, been disabled, or moved out of range.
+        if (IsLockedOn && !IsValidTarget(LockTarget, lockOnBreakRange))
+            SetLockTarget(null);
+
+        if (IsLockOnPressed())
+            ToggleLockOn();
+    }
+
+    /// <summary>
+    /// Lock on to the best target in view, or let go if already locked on.
+    /// Returns whether the player is locked on afterwards.
+    /// </summary>
+    public bool ToggleLockOn()
+    {
+        SetLockTarget(IsLockedOn ? null : FindLockTarget());
+        return IsLockedOn;
+    }
+
+    private void SetLockTarget(HitBody target)
+    {
+        if (target == LockTarget)
+            return;
+        LockTarget = target;
+        LockTargetChanged?.Invoke(target);
+    }
+
+    /// <summary>
+    /// The valid target closest to the middle of the camera's view, with
+    /// distance as a tie-breaker (one metre counts like two degrees).
+    /// </summary>
+    private HitBody FindLockTarget()
+    {
+        Camera cam = Camera.main;
+        Vector3 viewDir = cam != null ? cam.transform.forward : transform.forward;
+        viewDir.y = 0f;
+        if (viewDir.sqrMagnitude < 0.0001f)
+            viewDir = transform.forward;
+
+        HitBody best = null;
+        float bestScore = float.MaxValue;
+        foreach (HitBody body in HitBody.All)
+        {
+            if (!IsValidTarget(body, lockOnRange))
+                continue;
+
+            Vector3 to = body.transform.position - transform.position;
+            to.y = 0f;
+            float angle = Vector3.Angle(viewDir, to);
+            if (angle > lockOnMaxAngle)
+                continue;
+
+            float score = angle + to.magnitude * 2f;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = body;
+            }
+        }
+        return best;
+    }
+
+    private bool IsValidTarget(HitBody body, float range)
+    {
+        if (body == null || !body.isActiveAndEnabled || body.transform.IsChildOf(transform))
+            return false;
+        if (body.Health != null && body.Health.IsDead)
+            return false;
+
+        Vector3 to = body.transform.position - transform.position;
+        to.y = 0f;
+        return to.sqrMagnitude <= range * range;
     }
 
     // ------------------------------------------------- Timed roll / attack
@@ -343,8 +455,10 @@ public class PlayerController : MonoBehaviour
             if (stick.magnitude > stickDeadZone && stick.sqrMagnitude > input.sqrMagnitude)
                 input = stick;
 
+            // The right stick turns the player only when not locked on
+            // (locked on, the player always faces the target).
             float rightX = pad.rightStick.ReadValue().x;
-            if (Mathf.Abs(rightX) > stickDeadZone && Mathf.Abs(rightX) > Mathf.Abs(input.x))
+            if (!IsLockedOn && Mathf.Abs(rightX) > stickDeadZone && Mathf.Abs(rightX) > Mathf.Abs(input.x))
                 input.x = rightX;
         }
 
@@ -359,6 +473,14 @@ public class PlayerController : MonoBehaviour
         Gamepad pad = Gamepad.current;
         return (kb != null && kb.spaceKey.wasPressedThisFrame)
             || (pad != null && pad.buttonEast.wasPressedThisFrame);
+    }
+
+    private static bool IsLockOnPressed()
+    {
+        Keyboard kb = Keyboard.current;
+        Gamepad pad = Gamepad.current;
+        return (kb != null && kb.tabKey.wasPressedThisFrame)
+            || (pad != null && pad.rightStickButton.wasPressedThisFrame);
     }
 
     private static bool IsRunHeld()
