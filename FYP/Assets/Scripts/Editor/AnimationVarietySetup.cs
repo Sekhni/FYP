@@ -11,7 +11,8 @@ using UnityEngine;
 ///
 /// 1. Idle: the idle point of the Locomotion 2D blend tree becomes a 1D
 ///    "Idle Variants" tree on IdleVariant (four idle clips);
-///    PlayerController drifts between them while standing still.
+///    PlayerController drifts between them while standing still. Each idle
+///    bakes its root movement into the pose so the feet don't slide.
 /// 2. Attacks: three light swings, states Attack_Light_1..3 (AttackLight
 ///    trigger + AttackIndex 0-2), and the old attack state becomes
 ///    Attack_Heavy (AttackHeavy trigger). Each light clip gets the
@@ -73,9 +74,15 @@ public static class AnimationVarietySetup
 
         // Clip import settings first (reimports must finish before clips are used).
         // The .anim idles already loop; the FBX idles have to be told to.
+        // Every idle bakes its root movement into the pose: root motion is off
+        // in this project, so an idle that sways or turns its root would
+        // otherwise drag the planted feet across the floor.
         foreach (string idle in IdleClips)
+        {
             if (idle.EndsWith(".fbx"))
                 MakeFbxClipLoop(idle);
+            BakeRootIntoPose(idle);
+        }
         foreach (var a in LightAttacks)
             AddAttackEvents(a.path, a.start, a.end, a.done);
 
@@ -257,6 +264,43 @@ public static class AnimationVarietySetup
             threshold += 1f;
         }
         return tree;
+    }
+
+    // "Bake Into Pose" for root rotation, height and XZ position, so the clip's
+    // root movement stays in the pose instead of being thrown away. Unity
+    // stores this in two places with different names: .anim clips keep it on
+    // the clip (loopBlend*), FBX clips on the importer (lockRoot*).
+    private static void BakeRootIntoPose(string path)
+    {
+        if (path.EndsWith(".anim"))
+        {
+            var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
+            if (clip == null)
+                return;
+            AnimationClipSettings s = AnimationUtility.GetAnimationClipSettings(clip);
+            if (s.loopBlendOrientation && s.loopBlendPositionY && s.loopBlendPositionXZ)
+                return;
+            s.loopBlendOrientation = true;
+            s.loopBlendPositionY = true;
+            s.loopBlendPositionXZ = true;
+            AnimationUtility.SetAnimationClipSettings(clip, s);
+            EditorUtility.SetDirty(clip);
+            return;
+        }
+
+        var importer = AssetImporter.GetAtPath(path) as ModelImporter;
+        if (importer == null)
+            return;
+        ModelImporterClipAnimation[] clips = importer.clipAnimations;
+        if (clips == null || clips.Length == 0)
+            clips = importer.defaultClipAnimations;
+        if (clips.Length == 0 || (clips[0].lockRootRotation && clips[0].lockRootHeightY && clips[0].lockRootPositionXZ))
+            return;
+        clips[0].lockRootRotation = true;
+        clips[0].lockRootHeightY = true;
+        clips[0].lockRootPositionXZ = true;
+        importer.clipAnimations = clips;
+        importer.SaveAndReimport();
     }
 
     private static void MakeFbxClipLoop(string path)
