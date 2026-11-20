@@ -6,10 +6,10 @@ using UnityEngine.InputSystem;
 /// - Turn with the mouse OR with A / D (gamepad: right stick or left stick sideways).
 ///   The camera (ThirdPersonCamera) sits behind the player and follows.
 /// - W walks forward, S walks backward (the walk clip plays in reverse).
-///   The gamepad left stick gives analogue speed, as in the GDD.
+///   The gamepad left stick gives analogue speed.
 /// - Hold Left Shift (or click the left stick) to run forward.
 /// - Space rolls in the direction you are pressing (forward if nothing is
-///   pressed). The roll's own movement comes from the dive animation.
+///   pressed).
 /// - While blocking (right mouse, handled by CombatStateMachine) you can turn
 ///   but not walk. You can roll out of a block.
 /// - The mouse cursor is locked to the game window. Esc frees it, click to lock again.
@@ -18,9 +18,13 @@ using UnityEngine.InputSystem;
 /// - The Animator's "Speed" float is the real ground speed in metres per second.
 ///   The Locomotion blend tree thresholds (0 / 1.43 / 3.95) are the speeds the
 ///   Idle / Walk / Run clips actually travel at, so the feet don't slide.
-/// - While an attack plays, normal movement stops and the attack clip's own
-///   forward step (root motion) moves the player instead, scaled by
-///   attackStepScale.
+/// - No root motion is used anywhere. Rolls and attacks are moved by this
+///   script: each frame it reads how far through its animation the player is
+///   (Animator normalizedTime, which already includes the state's playback
+///   speed) and moves the matching share of rollDistance / attackDistance.
+///   So the movement always lasts exactly as long as the animation plays,
+///   even if you change the clip or its speed. The progress curves describe
+///   how the distance is spread over the animation (measured from the clips).
 /// Lock-on strafing is added later.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
@@ -38,16 +42,22 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float gravity = -20f;
 
     [Header("Attacks")]
-    [Tooltip("How much of the attack clip's forward step is applied. 0 = attack in place, 1 = full step (about 2 m on the light attack).")]
-    [Range(0f, 1f)]
-    [SerializeField] private float attackStepScale = 0.5f;
+    [Tooltip("Metres the light attack steps forward over the whole swing. 0 = attack in place.")]
+    [SerializeField] private float attackDistance = 1f;
+    [Tooltip("How the attack distance is spread over the swing (x = animation progress 0-1, y = share of distance 0-1). Default is measured from the Attack_Light clip.")]
+    [SerializeField] private AnimationCurve attackProgress = new AnimationCurve(
+        new Keyframe(0f, 0f), new Keyframe(0.23f, 0.17f), new Keyframe(0.40f, 0.51f),
+        new Keyframe(0.52f, 0.68f), new Keyframe(0.72f, 0.94f), new Keyframe(1f, 1f));
 
     [Header("Roll (Space)")]
-    [Tooltip("Seconds before you can move again after starting a roll.")]
-    [SerializeField] private float rollDuration = 1.05f;
-    [Tooltip("How much of the dive animation's travel is used. 1 = full distance (about 3.6 m).")]
-    [Range(0.2f, 1.5f)]
-    [SerializeField] private float rollDistanceScale = 1f;
+    [Tooltip("Metres travelled by one roll.")]
+    [SerializeField] private float rollDistance = 3.6f;
+    [Tooltip("How the roll distance is spread over the roll (x = animation progress 0-1, y = share of distance 0-1). Default is measured from the dive clip.")]
+    [SerializeField] private AnimationCurve rollProgress = new AnimationCurve(
+        new Keyframe(0f, 0f), new Keyframe(0.25f, 0.27f), new Keyframe(0.5f, 0.68f),
+        new Keyframe(0.75f, 0.9f), new Keyframe(1f, 1f));
+    [Tooltip("Safety: end the roll after this many seconds even if the animation never reported finishing.")]
+    [SerializeField] private float rollFailSafeSeconds = 3f;
 
     [Header("Turning")]
     [Tooltip("Degrees turned per pixel of mouse movement.")]
@@ -78,13 +88,21 @@ public class PlayerController : MonoBehaviour
     private Vector3 velocitySmoothing;
     private float verticalVelocity;
     private float yaw;
-    private float rollTimer;
+    private bool rolling;
+    private bool rollStarted;     // the Dodge animation has begun
+    private float rollElapsed;
+    private float rollLastProgress;
+    private float attackLastTime;
+    private float attackLastProgress;
+
+    private const string RollTag = "Dodge";     // tag on the Dodge state in PlayerAnimator
+    private const string AttackTag = "Attack";  // tag on the Attack_Light state
 
     /// <summary>Current horizontal speed in metres per second.</summary>
     public float CurrentSpeed => horizontalVelocity.magnitude;
 
     /// <summary>True while a roll is playing.</summary>
-    public bool IsDodging => rollTimer > 0f;
+    public bool IsDodging => rolling;
 
     private bool IsAttacking => combat != null && !combat.CanMove;
     private bool IsBlocking => combat != null && combat.IsBlocking;
@@ -112,8 +130,7 @@ public class PlayerController : MonoBehaviour
 
         yaw = transform.eulerAngles.y;
 
-        // Movement comes from this script, not from the clips (except the
-        // attack step, handled in OnAnimatorMove).
+        // All movement comes from this script, never from the clips.
         if (animator != null)
             animator.applyRootMotion = false;
     }
@@ -131,10 +148,13 @@ public class PlayerController : MonoBehaviour
         Vector2 input = ReadMoveInput();   // x = turn (A/D), y = forward/back (W/S)
 
         // ---- Roll ----
-        if (rollTimer > 0f)
-            rollTimer -= Time.deltaTime;
+        if (rolling)
+            UpdateRoll();
         else if (IsRollPressed() && !IsAttacking && controller.isGrounded)
             StartRoll(input);
+
+        // ---- Attack step ----
+        UpdateAttackStep();
 
         // ---- Turn with mouse and A/D (not mid-attack or mid-roll: you commit to it) ----
         if (!IsAttacking && !IsDodging)
@@ -155,7 +175,7 @@ public class PlayerController : MonoBehaviour
 
         if (IsAttacking || IsDodging || IsBlocking)
         {
-            // Stop at once: attacks and rolls move by their animation instead,
+            // Stop at once: rolls and attacks have their own timed movement,
             // and blocking holds you in place.
             targetVelocity = Vector3.zero;
             horizontalVelocity = Vector3.zero;
@@ -190,26 +210,7 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Called by Unity after the Animator updates, when the Animator is on this
-    /// GameObject. Defining it means Unity hands root motion to this script.
-    /// Only the attack's forward step is used; locomotion clips stay in place.
-    /// </summary>
-    private void OnAnimatorMove()
-    {
-        if (animator == null)
-            return;
-
-        float scale = IsDodging ? rollDistanceScale
-                    : IsAttacking ? attackStepScale
-                    : 0f;
-        if (scale <= 0f)
-            return;
-
-        Vector3 step = animator.deltaPosition;
-        step.y = 0f;
-        controller.Move(step * scale);
-    }
+    // ------------------------------------------------- Timed roll / attack
 
     private void StartRoll(Vector2 input)
     {
@@ -220,9 +221,106 @@ public class PlayerController : MonoBehaviour
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         }
 
-        rollTimer = rollDuration;
+        rolling = true;
+        rollStarted = false;
+        rollElapsed = 0f;
+        rollLastProgress = 0f;
+
         if (animator != null)
             animator.SetTrigger(DodgeHash);
+    }
+
+    private void UpdateRoll()
+    {
+        rollElapsed += Time.deltaTime;
+
+        if (TryGetAnimProgress(RollTag, out float t, out bool leaving))
+        {
+            rollStarted = true;
+            MoveAlongCurve(rollProgress, rollDistance, t, ref rollLastProgress);
+
+            // Hand control back as soon as the roll starts blending out.
+            if (leaving || t >= 1f)
+                EndRoll();
+        }
+        else if (rollStarted || rollElapsed > rollFailSafeSeconds || animator == null)
+        {
+            EndRoll();
+        }
+    }
+
+    private void EndRoll()
+    {
+        rolling = false;
+        if (animator != null)
+            animator.ResetTrigger(DodgeHash);
+    }
+
+    private void UpdateAttackStep()
+    {
+        if (!IsAttacking || attackDistance <= 0f
+            || !TryGetAnimProgress(AttackTag, out float t, out _))
+        {
+            attackLastTime = 0f;
+            attackLastProgress = 0f;
+            return;
+        }
+
+        // A new swing started (chained attack): measure from zero again.
+        if (t < attackLastTime)
+            attackLastProgress = 0f;
+        attackLastTime = t;
+
+        MoveAlongCurve(attackProgress, attackDistance, t, ref attackLastProgress);
+    }
+
+    /// <summary>
+    /// Moves forward by the part of 'distance' covered since last frame,
+    /// according to how far through the animation we are.
+    /// </summary>
+    private void MoveAlongCurve(AnimationCurve curve, float distance, float t, ref float lastProgress)
+    {
+        float progress = curve.Evaluate(Mathf.Clamp01(t));
+        float step = (progress - lastProgress) * distance;
+        lastProgress = progress;
+
+        if (Mathf.Abs(step) > 0f)
+            controller.Move(transform.forward * step);
+    }
+
+    /// <summary>
+    /// How far (0-1) the state with this tag has played. Uses the Animator's own
+    /// clock, so it already accounts for clip length and playback speed.
+    /// 'leaving' is true while that state is blending out to another state.
+    /// </summary>
+    private bool TryGetAnimProgress(string tag, out float t, out bool leaving)
+    {
+        t = 0f;
+        leaving = false;
+        if (animator == null)
+            return false;
+
+        AnimatorStateInfo current = animator.GetCurrentAnimatorStateInfo(0);
+        bool inTransition = animator.IsInTransition(0);
+
+        if (inTransition)
+        {
+            AnimatorStateInfo next = animator.GetNextAnimatorStateInfo(0);
+            if (next.IsTag(tag))
+            {
+                t = next.normalizedTime;      // blending in
+                return true;
+            }
+        }
+
+        if (current.IsTag(tag))
+        {
+            t = current.normalizedTime;
+            leaving = inTransition;           // blending out
+            return true;
+        }
+
+        return false;
     }
 
     // ---------------------------------------------------------------- Input
