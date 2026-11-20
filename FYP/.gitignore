@@ -45,3 +45,6 @@ sysinfo.txt
 crashlytics-build.properties
 .DS_Store
 Thumbs.db
+# Unity crash-recovery scenes
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta
