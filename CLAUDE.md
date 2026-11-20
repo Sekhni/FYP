@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-"Blade & Reflex" — a final-year-project third-person melee combat game (Paladin player: sword & shield). The Unity project lives in the `FYP/` subfolder, not the repo root. The game design doc is `FYP/Blade_and_Reflex_GDD.docx`.
+"Blade & Reflex" — a final-year-project third-person melee combat game (Paladin player: sword & shield). The Unity project lives in the `FYP/` subfolder, not the repo root. The game design doc is `FYP/Blade_and_Reflex_GDD.md` (Markdown; Section 13 records how AI is used, so update its table when AI-assisted work lands).
 
 - Unity **6000.6.4f1** (Unity 6), URP 17, new **Input System** (`com.unity.inputsystem`) — legacy `Input.*` is not used.
 - Main scene: `FYP/Assets/Scenes/SampleScene.unity`.
