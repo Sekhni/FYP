@@ -10,6 +10,10 @@ using UnityEngine;
 ///   red  = you got hit,   blue = you blocked,   white = you rolled through.
 /// When its health hits 0 it tips over, then stands back up when Health refills.
 ///
+/// The dummy's own strike is a simple range-and-arc check, not a blade
+/// sweep: it is a test target, not a fighter. Hitting the dummy does use
+/// the blade (it has a HitBody).
+///
 /// Add it with the menu: Tools > Blade and Reflex > Add Training Dummy.
 /// </summary>
 [RequireComponent(typeof(Health))]

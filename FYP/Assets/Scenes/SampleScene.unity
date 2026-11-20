@@ -119,6 +119,21 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!4 &142526356 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -3746190272939815206, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &149291958 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1852576806548013000, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &160728099 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 608321761475470972, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &217113057
 GameObject:
   m_ObjectHideFlags: 0
@@ -376,6 +391,11 @@ MonoBehaviour:
   wallLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+--- !u!4 &397051750 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 8169382868667117632, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
@@ -503,6 +523,26 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!4 &496841582 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -2072040086291044643, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &599886580 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8021001004253913084, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &619168265 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 9175088765034030054, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &667284737 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 6000407479487422213, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -665,6 +705,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!4 &1239392639 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2559285840627121667, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1263763322
 GameObject:
   m_ObjectHideFlags: 0
@@ -676,6 +721,7 @@ GameObject:
   - component: {fileID: 1263763325}
   - component: {fileID: 1263763324}
   - component: {fileID: 1263763323}
+  - component: {fileID: 1263763326}
   m_Layer: 0
   m_Name: Training Dummy
   m_TagString: Untagged
@@ -747,6 +793,44 @@ Transform:
   - {fileID: 217113058}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1263763326
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263763322}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a8e7172da707c2a4bae68d4f42001065, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HitBody
+  parts:
+  - name: Body
+    bone: {fileID: 1263763325}
+    start: {x: 0, y: 0.4, z: 0}
+    end: {x: 0, y: 1.6, z: 0}
+    radius: 0.4
+  - name: Arm
+    bone: {fileID: 1263763325}
+    start: {x: 0.35, y: 1.3, z: 0.175}
+    end: {x: 0.35, y: 1.3, z: 0.925}
+    radius: 0.075
+--- !u!4 &1284121795 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -3432401550182100168, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1318437643 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -3321919801592875672, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1582237295 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -6874584590210671055, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1593428230
 GameObject:
   m_ObjectHideFlags: 0
@@ -937,6 +1021,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1646528646}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1646528648}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1646528647}
   m_SourcePrefab: {fileID: 100100000, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
 --- !u!1 &1646528639 stripped
 GameObject:
@@ -956,6 +1046,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatStateMachine
   animator: {fileID: 0}
+  attackDamage: 20
+  stunTime: 0.6
+  knockbackDistance: 0.6
+  blockKnockbackDistance: 0.25
+  knockbackTime: 0.15
   failSafeSeconds: 2
   logStateChanges: 1
 --- !u!114 &1646528641
@@ -975,9 +1070,120 @@ MonoBehaviour:
   accelerationTime: 0.15
   decelerationTime: 0.1
   gravity: -20
-  attackStepScale: 0.5
-  rollDuration: 1.05
-  rollDistanceScale: 1
+  attackDistance: 1
+  attackProgress:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.23
+      value: 0.17
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.4
+      value: 0.51
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.52
+      value: 0.68
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.72
+      value: 0.94
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  rollDistance: 3.6
+  rollProgress:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.25
+      value: 0.27
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.5
+      value: 0.68
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.75
+      value: 0.9
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  rollFailSafeSeconds: 3
   mouseSensitivity: 0.15
   keyTurnSpeed: 180
   backwardSpeedFactor: 0.8
@@ -1035,6 +1241,132 @@ MonoBehaviour:
   barInCorner: 1
   barLabel: Player
   barHeightAboveFeet: 2.3
+--- !u!114 &1646528647
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1646528639}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 37edca2fefca1f740afc3fb4ac2c3c45, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HitCalculator
+  bladeBone: {fileID: 619168265}
+  hiltLocal: {x: 0.027, y: -0.009, z: 0.104}
+  tipLocal: {x: 0.207, y: -0.052, z: 0.811}
+  bladeRadius: 0.03
+  drawDebug: 1
+  logHits: 1
+--- !u!114 &1646528648
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1646528639}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a8e7172da707c2a4bae68d4f42001065, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HitBody
+  parts:
+  - name: Head
+    bone: {fileID: 1318437643}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -0.000000018782632, y: 0.18000013, z: -0.00000016205013}
+    radius: 0.11
+  - name: Upper torso
+    bone: {fileID: 599886580}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -1.09926e-10, y: 0.30128825, z: 0.0000002713435}
+    radius: 0.17
+  - name: Lower torso
+    bone: {fileID: 1902762263}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -0.00036357515, y: 0.22912139, z: -0.024206564}
+    radius: 0.16
+  - name: Left upper arm
+    bone: {fileID: 1284121795}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: 0.000000032538082, y: 0.25574335, z: 0.00000011175871}
+    radius: 0.07
+  - name: Left forearm
+    bone: {fileID: 2000604882}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: 0.000000024987141, y: 0.21603379, z: 0.00000038572944}
+    radius: 0.06
+  - name: Left hand
+    bone: {fileID: 1984567584}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -0.00000015039029, y: 0.09700772, z: 0.00000026924755}
+    radius: 0.05
+  - name: Right upper arm
+    bone: {fileID: 667284737}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -0.00000003655441, y: 0.2557435, z: 0.000000074505806}
+    radius: 0.07
+  - name: Right forearm
+    bone: {fileID: 1922128839}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -0.00000004562384, y: 0.21603513, z: 0.000000032948748}
+    radius: 0.06
+  - name: Right hand
+    bone: {fileID: 149291958}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: 0.00000039005388, y: 0.09700626, z: 0.000000013180008}
+    radius: 0.05
+  - name: Left thigh
+    bone: {fileID: 1239392639}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -0.0000000034950745, y: 0.41702002, z: 0}
+    radius: 0.09
+  - name: Left shin
+    bone: {fileID: 496841582}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -0.0000000049471174, y: 0.3698101, z: 0.000000011175871}
+    radius: 0.07
+  - name: Left foot
+    bone: {fileID: 1582237295}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: 0.0000000055879354, y: 0.16700011, z: -0.00000010430813}
+    radius: 0.05
+  - name: Right thigh
+    bone: {fileID: 397051750}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: 0.0000000039506176, y: 0.4170201, z: -9.313226e-10}
+    radius: 0.09
+  - name: Right shin
+    bone: {fileID: 142526356}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -0.000000005154516, y: 0.3698099, z: 0.000000022351742}
+    radius: 0.07
+  - name: Right foot
+    bone: {fileID: 160728099}
+    start: {x: 0, y: 0, z: 0}
+    end: {x: -0.000000010244548, y: 0.16700017, z: -0.00000016391277}
+    radius: 0.05
+--- !u!4 &1902762263 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5465940246521907071, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1922128839 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2563496969622287784, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1984567584 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 6502182839619065283, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &2000604882 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -1812909498023395591, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}
+  m_PrefabInstance: {fileID: 1646528638}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -31,9 +30,9 @@ public enum CombatState
 ///              you keep your guard.
 ///   Dodged  -> nothing.
 ///
-/// Hits: while the state is Active, anything with a Health component inside
-/// the reach (a slice in front of you, attackRange metres long and attackArc
-/// degrees wide) takes attackDamage. Each target can be hit once per swing.
+/// Hits: while the state is Active, HitCalculator (same object) sweeps the
+/// blade against every HitBody's capsules. When it reports a target, that
+/// target's Health takes attackDamage. Each target can be hit once per swing.
 /// </summary>
 public class CombatStateMachine : MonoBehaviour
 {
@@ -41,14 +40,8 @@ public class CombatStateMachine : MonoBehaviour
     [SerializeField] private Animator animator;
 
     [Header("Light attack hit")]
+    [Tooltip("Damage dealt when the blade touches a target (before its block or dodge is applied).")]
     [SerializeField] private float attackDamage = 20f;
-    [Tooltip("How far in front of you the swing reaches, in metres.")]
-    [SerializeField] private float attackRange = 2f;
-    [Tooltip("How wide the swing is, in degrees.")]
-    [Range(10f, 360f)]
-    [SerializeField] private float attackArc = 100f;
-    [Tooltip("Which layers the swing can hit.")]
-    [SerializeField] private LayerMask hitLayers = ~0;
 
     [Header("Getting hit")]
     [Tooltip("Seconds you can't move, attack, block or roll after being hit.")]
@@ -78,8 +71,7 @@ public class CombatStateMachine : MonoBehaviour
     private float knockbackTimer;
 
     private PlayerController mover;
-    private readonly HashSet<Health> hitThisSwing = new HashSet<Health>();
-    private readonly Collider[] overlapBuffer = new Collider[32];
+    private HitCalculator hitCalculator;
 
     private float timeInState;
 
@@ -107,12 +99,20 @@ public class CombatStateMachine : MonoBehaviour
         health = GetComponent<Health>();
         if (health != null)
             health.HitReceived += OnHitReceived;
+
+        hitCalculator = GetComponent<HitCalculator>();
+        if (hitCalculator != null)
+            hitCalculator.TargetHit += OnBladeHit;
+        else
+            Debug.LogWarning($"CombatStateMachine on {name}: no HitCalculator, so attacks can't hit anything.");
     }
 
     private void OnDestroy()
     {
         if (health != null)
             health.HitReceived -= OnHitReceived;
+        if (hitCalculator != null)
+            hitCalculator.TargetHit -= OnBladeHit;
     }
 
     private void Update()
@@ -130,9 +130,6 @@ public class CombatStateMachine : MonoBehaviour
         }
         else if (State != CombatState.Idle)
         {
-            if (State == CombatState.Active)
-                SweepForHits();
-
             timeInState += Time.deltaTime;
 
             if (State == CombatState.Stunned)
@@ -225,42 +222,16 @@ public class CombatStateMachine : MonoBehaviour
         characterController.Move(knockbackVelocity * dt);
     }
 
-    // ---- Hit detection ----
+    // ---- Dealing hits ----
 
-    private void SweepForHits()
+    // HitCalculator found a target this swing (once per target per swing).
+    // Every attack rule goes through here, so this is where directional
+    // blocks, parries, poise damage and body-part multipliers will read
+    // 'hit' (which part, where on the blade, when in the frame).
+    private void OnBladeHit(HitBody target, BladeHit hit)
     {
-        Vector3 origin = transform.position + Vector3.up;
-        int count = Physics.OverlapSphereNonAlloc(origin, attackRange, overlapBuffer,
-                                                  hitLayers, QueryTriggerInteraction.Ignore);
-        for (int i = 0; i < count; i++)
-        {
-            Health target = overlapBuffer[i].GetComponentInParent<Health>();
-            if (target == null || target.transform == transform || hitThisSwing.Contains(target))
-                continue;
-
-            Vector3 toTarget = target.transform.position - transform.position;
-            toTarget.y = 0f;
-            if (toTarget.sqrMagnitude > 0.0001f
-                && Vector3.Angle(transform.forward, toTarget) > attackArc * 0.5f)
-                continue;
-
-            hitThisSwing.Add(target);
-            target.TakeHit(attackDamage, transform);
-        }
-    }
-
-    private void OnDrawGizmosSelected()
-    {
-        // Shows the swing's reach in the Scene view when the Player is selected.
-        Gizmos.color = new Color(1f, 0.3f, 0.2f, 0.8f);
-        Vector3 origin = transform.position + Vector3.up;
-        float half = attackArc * 0.5f;
-        Vector3 left = Quaternion.Euler(0f, -half, 0f) * transform.forward * attackRange;
-        Vector3 right = Quaternion.Euler(0f, half, 0f) * transform.forward * attackRange;
-        Gizmos.DrawLine(origin, origin + left);
-        Gizmos.DrawLine(origin, origin + right);
-        Gizmos.DrawLine(origin + left, origin + transform.forward * attackRange);
-        Gizmos.DrawLine(origin + right, origin + transform.forward * attackRange);
+        if (target.Health != null)
+            target.Health.TakeHit(attackDamage, transform);
     }
 
     // ---- Animation Event receivers (names must match the events exactly) ----
@@ -289,9 +260,6 @@ public class CombatStateMachine : MonoBehaviour
     {
         State = next;
         timeInState = 0f;
-
-        if (next == CombatState.Windup)
-            hitThisSwing.Clear();
 
         if (logStateChanges)
             Debug.Log($"[Combat] {name} -> {next}");
