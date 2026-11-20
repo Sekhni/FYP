@@ -997,13 +997,14 @@ MonoBehaviour:
   freeCamera: {fileID: 1984388696}
   lockOnCamera: {fileID: 1177767485}
   pivotHeight: 1.5
-  mouseSensitivity: 0.1
+  mouseYawSensitivity: 0.15
+  mousePitchSensitivity: 0.1
+  stickTurnSpeed: 180
   stickTiltSpeed: 90
   minPitch: -20
   maxPitch: 60
   startPitch: 15
   invertY: 0
-  yawSmoothTime: 0.05
   lockPitchOffset: 8
   lockSmoothTime: 0.1
 --- !u!4 &1561456868
@@ -1264,6 +1265,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CombatStateMachine
   animator: {fileID: 0}
   attackDamage: 20
+  chainWindow: 0.6
+  heavyDamage: 35
+  heavyHoldTime: 0.25
+  hitVariants: 2
+  blockHitVariants: 2
   stunTime: 0.6
   knockbackDistance: 0.6
   blockKnockbackDistance: 0.25
@@ -1287,7 +1293,8 @@ MonoBehaviour:
   accelerationTime: 0.15
   decelerationTime: 0.1
   gravity: -20
-  attackDistance: 1
+  lightAttackDistance: 0.3
+  heavyAttackDistance: 1
   attackProgress:
     serializedVersion: 2
     m_Curve:
@@ -1401,16 +1408,18 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   rollFailSafeSeconds: 3
-  mouseSensitivity: 0.15
-  keyTurnSpeed: 180
-  backwardSpeedFactor: 0.8
+  freeTurnSpeed: 720
   lockCursor: 1
   lockOnRange: 15
   lockOnBreakRange: 20
   lockOnMaxAngle: 70
   lockPointHeight: 1.2
   strafeSpeed: 1.1
+  backwardSpeedFactor: 0.8
   lockTurnSpeed: 540
+  idleVariants: 4
+  idleChangeInterval: {x: 6, y: 12}
+  idleBlendTime: 0.6
   stickDeadZone: 0.15
   animator: {fileID: 0}
 --- !u!143 &1646528642

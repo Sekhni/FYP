@@ -5,22 +5,22 @@ using UnityEngine.Serialization;
 
 /// <summary>
 /// Player movement and lock-on for Blade & Reflex.
-/// - Turn with the mouse OR with A / D (gamepad: right stick or left stick sideways).
-///   The camera (LockOnCamera) sits behind the player and follows.
-/// - W walks forward, S walks backward.
-///   The gamepad left stick gives analogue speed.
-/// - Hold Left Shift (or click the left stick) to run forward.
+/// - W A S D (gamepad: left stick, analogue) move relative to the camera, and
+///   the player turns to face the way they are moving (GDD section 3
+///   controls). The mouse / right stick turn the camera (LockOnCamera), not
+///   the player.
+/// - Hold Left Shift (or click the left stick) to run.
 /// - Tab (gamepad: click the right stick) locks on to the enemy nearest the
 ///   middle of the view, and again to let go. While locked on the player
 ///   always faces the target: W / S walk towards and away from it, A / D
-///   strafe around it, and there is no running. Mouse and right-stick
-///   sideways movement don't turn the player while locked on; they are kept
-///   free for choosing the guard direction (GDD section 3). The lock breaks if the target
+///   strafe around it, and there is no running. The camera then follows the
+///   lock, so the mouse / right stick are kept free for choosing the guard
+///   direction (GDD section 3). The lock breaks if the target
 ///   dies, is disabled, or gets further than lockOnBreakRange away.
-/// - Space rolls in the direction you are pressing (forward if nothing is
-///   pressed).
+/// - Space rolls in the direction you are pressing: relative to the camera,
+///   or relative to the target while locked on (forward if nothing is pressed).
 /// - While blocking (right mouse, handled by CombatStateMachine) you can turn
-///   but not walk. You can roll out of a block.
+///   (towards the direction you press) but not walk. You can roll out of a block.
 /// - The mouse cursor is locked to the game window. Esc frees it, click to lock again.
 /// - Speed builds up and falls off over a short time, so movement feels weighty
 ///   instead of snapping on and off.
@@ -75,14 +75,8 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float rollFailSafeSeconds = 3f;
 
     [Header("Turning")]
-    [Tooltip("Degrees turned per pixel of mouse movement.")]
-    [SerializeField] private float mouseSensitivity = 0.15f;
-    [Tooltip("Degrees per second when turning with A / D or a stick.")]
-    [SerializeField] private float keyTurnSpeed = 180f;
-    [Tooltip("Backward walking speed as a fraction of walk speed. No running backward. " +
-             "The walk-back clip travels at about 1.09 m/s (0.76 of walk speed).")]
-    [Range(0.3f, 1f)]
-    [SerializeField] private float backwardSpeedFactor = 0.8f;
+    [Tooltip("Degrees per second the player turns to face the direction they are moving (not locked on).")]
+    [SerializeField] private float freeTurnSpeed = 720f;
     [Tooltip("Lock and hide the mouse cursor while playing.")]
     [SerializeField] private bool lockCursor = true;
 
@@ -98,6 +92,10 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float lockPointHeight = 1.2f;
     [Tooltip("Sideways speed while locked on, in metres per second. The strafe clips travel at 1.05-1.19 m/s.")]
     [SerializeField] private float strafeSpeed = 1.1f;
+    [Tooltip("Backward walking speed while locked on, as a fraction of walk speed. No running backward. " +
+             "The walk-back clip travels at about 1.09 m/s (0.76 of walk speed).")]
+    [Range(0.3f, 1f)]
+    [SerializeField] private float backwardSpeedFactor = 0.8f;
     [Tooltip("Degrees per second the player turns to keep facing the target.")]
     [SerializeField] private float lockTurnSpeed = 540f;
 
@@ -210,7 +208,11 @@ public class PlayerController : MonoBehaviour
         UpdateCursorLock();
         UpdateLockOn();
 
-        Vector2 input = ReadMoveInput();   // x = turn or strafe (A/D), y = forward/back (W/S)
+        Vector2 input = ReadMoveInput();   // x = A/D, y = W/S
+
+        // Free: W A S D move relative to the camera (a world direction, length 0-1).
+        // Locked on: they move relative to the player, who faces the target.
+        Vector3 moveDir = IsLockedOn ? Vector3.zero : CameraRelative(input);
 
         // ---- Roll ----
         if (rolling)
@@ -222,7 +224,7 @@ public class PlayerController : MonoBehaviour
         UpdateAttackStep();
 
         // ---- Turn (not mid-attack or mid-roll: you commit to it) ----
-        // Free: mouse and A/D turn the player. Locked on: face the target.
+        // Free: turn to face the way you are moving. Locked on: face the target.
         if (!IsAttacking && !IsDodging)
         {
             if (IsLockedOn)
@@ -235,25 +237,35 @@ public class PlayerController : MonoBehaviour
                     yaw = Mathf.MoveTowardsAngle(yaw, targetYaw, lockTurnSpeed * Time.deltaTime);
                 }
             }
-            else
+            else if (moveDir.sqrMagnitude > 0.0001f)
             {
-                yaw += ReadMouseTurn() + input.x * keyTurnSpeed * Time.deltaTime;
+                float targetYaw = Mathf.Atan2(moveDir.x, moveDir.z) * Mathf.Rad2Deg;
+                yaw = Mathf.MoveTowardsAngle(yaw, targetYaw, freeTurnSpeed * Time.deltaTime);
             }
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         }
 
         // ---- Horizontal movement ----
-        bool backward = input.y < 0f;
-        float forwardSpeed = backward ? walkSpeed * backwardSpeedFactor
-                           : IsRunHeld() && !IsLockedOn ? runSpeed
-                           : walkSpeed;
-        Vector3 targetVelocity = transform.forward * (input.y * forwardSpeed);
+        Vector3 targetVelocity;
         if (IsLockedOn)
         {
-            // A/D strafe around the target. Keep diagonals (W+D) at walking
-            // pace, or the blend tree would mix in the run clip.
+            // W/S towards and away from the target, A/D strafe around it, no
+            // running. Keep diagonals (W+D) at walking pace, or the blend tree
+            // would mix in the run clip.
             Vector2 move = input.sqrMagnitude > 1f ? input.normalized : input;
+            float forwardSpeed = move.y < 0f ? walkSpeed * backwardSpeedFactor : walkSpeed;
             targetVelocity = transform.forward * (move.y * forwardSpeed) + transform.right * (move.x * strafeSpeed);
+        }
+        else
+        {
+            // Speed up only as far as the player already faces the new
+            // direction, so a sharp change of direction turns first instead of
+            // briefly sliding backwards or sideways (which would play the
+            // walk-back or strafe clips at running speed).
+            float facing = moveDir.sqrMagnitude > 0.0001f
+                ? Mathf.Clamp01(Vector3.Dot(transform.forward, moveDir.normalized))
+                : 0f;
+            targetVelocity = moveDir * ((IsRunHeld() ? runSpeed : walkSpeed) * facing);
         }
 
         if (IsAttacking || IsDodging || IsBlocking)
@@ -400,10 +412,20 @@ public class PlayerController : MonoBehaviour
 
     private void StartRoll(Vector2 input)
     {
-        // Face the pressed direction (W/S = forward/back, A/D = sideways), then roll forward.
+        // Face the pressed direction, then roll forward. Free: the direction
+        // is relative to the camera. Locked on: relative to the player (W/S =
+        // towards/away from the target, A/D = sideways around it).
         if (input.sqrMagnitude > 0.01f)
         {
-            yaw += Mathf.Atan2(input.x, input.y) * Mathf.Rad2Deg;
+            if (IsLockedOn)
+            {
+                yaw += Mathf.Atan2(input.x, input.y) * Mathf.Rad2Deg;
+            }
+            else
+            {
+                Vector3 dir = CameraRelative(input);
+                yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+            }
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         }
 
@@ -532,15 +554,11 @@ public class PlayerController : MonoBehaviour
         Gamepad pad = Gamepad.current;
         if (pad != null)
         {
+            // (The right stick turns the camera, or later chooses the guard
+            // direction while locked on; it never moves the player.)
             Vector2 stick = pad.leftStick.ReadValue();
             if (stick.magnitude > stickDeadZone && stick.sqrMagnitude > input.sqrMagnitude)
                 input = stick;
-
-            // The right stick turns the player only when not locked on.
-            // Locked on, it is kept free for the guard direction (GDD section 3).
-            float rightX = pad.rightStick.ReadValue().x;
-            if (!IsLockedOn && Mathf.Abs(rightX) > stickDeadZone && Mathf.Abs(rightX) > Mathf.Abs(input.x))
-                input.x = rightX;
         }
 
         input.x = Mathf.Clamp(input.x, -1f, 1f);
@@ -572,12 +590,22 @@ public class PlayerController : MonoBehaviour
             || (pad != null && pad.leftStickButton.isPressed);
     }
 
-    private float ReadMouseTurn()
+    /// <summary>
+    /// W A S D / stick input turned into a flat world direction relative to
+    /// the camera (W = away from the camera, D = to its right), length 0-1.
+    /// </summary>
+    private Vector3 CameraRelative(Vector2 input)
     {
-        Mouse mouse = Mouse.current;
-        if (mouse == null || Cursor.lockState != CursorLockMode.Locked)
-            return 0f;
-        return mouse.delta.ReadValue().x * mouseSensitivity;
+        Camera cam = Camera.main;
+        Vector3 forward = cam != null ? cam.transform.forward : transform.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.0001f)
+            forward = transform.forward;   // camera looking straight down
+        forward.Normalize();
+        Vector3 right = new Vector3(forward.z, 0f, -forward.x);
+
+        Vector3 dir = forward * input.y + right * input.x;
+        return dir.sqrMagnitude > 1f ? dir.normalized : dir;
     }
 
     private void UpdateCursorLock()
