@@ -12,7 +12,9 @@ using UnityEngine.InputSystem;
 /// - Tab (gamepad: click the right stick) locks on to the enemy nearest the
 ///   middle of the view, and again to let go. While locked on the player
 ///   always faces the target: W / S walk towards and away from it, A / D
-///   strafe around it, and there is no running. The lock breaks if the target
+///   strafe around it, and there is no running. Mouse and right-stick
+///   sideways movement don't turn the player while locked on; they are kept
+///   free for choosing the guard direction (GDD section 3). The lock breaks if the target
 ///   dies, is disabled, or gets further than lockOnBreakRange away.
 /// - Space rolls in the direction you are pressing (forward if nothing is
 ///   pressed).
@@ -25,7 +27,8 @@ using UnityEngine.InputSystem;
 ///   metres per second, sideways and forwards relative to the player. The
 ///   Locomotion 2D blend tree places each clip at the speed it actually
 ///   travels (walk 1.43 forward, run 3.95, back 1.09, strafe 1.19 right /
-///   1.05 left), so the feet don't slide. "Speed" is the overall ground speed.
+///   1.05 left), so the feet don't slide. "Speed" (overall ground speed) is
+///   also set, but no Animator state uses it at the moment.
 /// - No root motion is used anywhere. Rolls and attacks are moved by this
 ///   script: each frame it reads how far through its animation the player is
 ///   (Animator normalizedTime, which already includes the state's playback
@@ -118,6 +121,9 @@ public class PlayerController : MonoBehaviour
     private float attackLastTime;
     private float attackLastProgress;
 
+    // Target choice: one metre of distance counts as much as this many degrees off the view centre.
+    private const float DegreesPerMetre = 2f;
+
     private const string RollTag = "Dodge";     // tag on the Dodge state in PlayerAnimator
     private const string AttackTag = "Attack";  // tag on the Attack_Light state
 
@@ -130,6 +136,7 @@ public class PlayerController : MonoBehaviour
     /// <summary>The body the player is locked on to, or null.</summary>
     public HitBody LockTarget { get; private set; }
 
+    /// <summary>True while locked on to a live target.</summary>
     public bool IsLockedOn => LockTarget != null;
 
     /// <summary>The point on the target the camera and reticle aim at.</summary>
@@ -162,6 +169,12 @@ public class PlayerController : MonoBehaviour
     {
         if (lockCursor)
             SetCursorLocked(true);
+    }
+
+    private void OnValidate()
+    {
+        // A break range shorter than the pick range would drop every new lock at once.
+        lockOnBreakRange = Mathf.Max(lockOnBreakRange, lockOnRange);
     }
 
     private void Update()
@@ -208,7 +221,12 @@ public class PlayerController : MonoBehaviour
                            : walkSpeed;
         Vector3 targetVelocity = transform.forward * (input.y * forwardSpeed);
         if (IsLockedOn)
-            targetVelocity += transform.right * (input.x * strafeSpeed);   // A/D strafe around the target
+        {
+            // A/D strafe around the target. Keep diagonals (W+D) at walking
+            // pace, or the blend tree would mix in the run clip.
+            Vector2 move = input.sqrMagnitude > 1f ? input.normalized : input;
+            targetVelocity = transform.forward * (move.y * forwardSpeed) + transform.right * (move.x * strafeSpeed);
+        }
 
         if (IsAttacking || IsDodging || IsBlocking)
         {
@@ -249,8 +267,10 @@ public class PlayerController : MonoBehaviour
 
     private void UpdateLockOn()
     {
-        // Let go of a target that has died, been disabled, or moved out of range.
-        if (IsLockedOn && !IsValidTarget(LockTarget, lockOnBreakRange))
+        // Let go of a target that has died, been disabled or destroyed, or
+        // moved out of range. (ReferenceEquals: a destroyed target compares
+        // equal to null, but the lock still has to be released and announced.)
+        if (!ReferenceEquals(LockTarget, null) && !IsValidTarget(LockTarget, lockOnBreakRange))
             SetLockTarget(null);
 
         if (IsLockOnPressed())
@@ -269,7 +289,7 @@ public class PlayerController : MonoBehaviour
 
     private void SetLockTarget(HitBody target)
     {
-        if (target == LockTarget)
+        if (ReferenceEquals(target, LockTarget))
             return;
         LockTarget = target;
         LockTargetChanged?.Invoke(target);
@@ -300,7 +320,7 @@ public class PlayerController : MonoBehaviour
             if (angle > lockOnMaxAngle)
                 continue;
 
-            float score = angle + to.magnitude * 2f;
+            float score = angle + to.magnitude * DegreesPerMetre;
             if (score < bestScore)
             {
                 bestScore = score;
@@ -455,8 +475,8 @@ public class PlayerController : MonoBehaviour
             if (stick.magnitude > stickDeadZone && stick.sqrMagnitude > input.sqrMagnitude)
                 input = stick;
 
-            // The right stick turns the player only when not locked on
-            // (locked on, the player always faces the target).
+            // The right stick turns the player only when not locked on.
+            // Locked on, it is kept free for the guard direction (GDD section 3).
             float rightX = pad.rightStick.ReadValue().x;
             if (!IsLockedOn && Mathf.Abs(rightX) > stickDeadZone && Mathf.Abs(rightX) > Mathf.Abs(input.x))
                 input.x = rightX;

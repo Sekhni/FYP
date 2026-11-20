@@ -249,7 +249,7 @@ The game is built in Unity with C#. Player and enemies share one combat core so 
 | HitCalculator | Reads blade and body-capsule positions from bones each frame, calls HitMath during active frames and reports hits once per swing |
 | AnimationEventRelay | Receives Animation Events and forwards them as C# events (active start/end, parry window, cancel window) |
 | PlayerController | Reads the Input System, handles movement, lock-on and guard direction |
-| LockOnCamera | Cinemachine camera that frames both fighters |
+| LockOnCamera | Drives a free camera and a lock-on Cinemachine camera (which keeps both fighters in view), blended by the Cinemachine Brain |
 | EnemyBrain | Reads player state, scores actions and sends commands to the combat state machine |
 | AttackData, FighterStats, EnemyProfile (ScriptableObjects) | Frame data, stat values and archetype weightings |
 
@@ -352,10 +352,11 @@ This table records all AI-assisted work so far. It is updated each month, and th
 | Month | Work | What AI did | What the developer did | How it was checked |
 |---|---|---|---|---|
 | 1 | This design document (Sections 1 to 12) | Helped write and edit the text | Gave the instructions, reviewed and accepted the text | Developer's review |
-| 1 | Movement, camera and first combat state machine (`PlayerController`, `ThirdPersonCamera`, `CombatStateMachine`) | Helped write the code | Set the requirements, reviewed and accepted the result | Developer's play testing in Unity |
+| 1 | Movement, camera and first combat state machine (`PlayerController`, `ThirdPersonCamera`, `CombatStateMachine`) | Helped write the code (the camera was later replaced by `LockOnCamera`) | Set the requirements, reviewed and accepted the result | Developer's play testing in Unity |
 | 1 | Health, blocking and training dummy (`Health`, block and hit reactions, `TrainingDummy`) | Helped write the code, the editor menu and the Animator block and hit states; moved rolls and attack steps from root motion into code; added a first hit check (later replaced) | Set the requirements, reviewed and accepted the result | Developer's play testing in Unity |
 | 1 | Hit detection maths (`HitMath`) | Wrote the code and its 32 unit tests from the rules in Section 4 | Set the requirement, reviewed and accepted the result | Unit tests pass in Unity |
 | 1 | Blade and body hit detection (`HitCalculator`, `HitBody`) | Wrote the components, connected them to the combat state machine in place of the old hit check, added an editor menu to set them up, measured the sword model to place the blade on the sword bone, and set up the scene | Set the requirement, reviewed and accepted the result | Checked in play mode against the training dummy: one hit per swing |
+| 1 | Lock-on, strafing and camera (`PlayerController` lock-on, `LockOnCamera`, `LockOnReticle`, an editor set-up menu) | Wrote the lock-on targeting and strafe movement, the Cinemachine free and lock-on camera rig, a placeholder reticle, and a menu that builds the rig and a 2D movement blend tree; measured the walk-back and strafe clips' travel speeds so the feet don't slide; set up the scene | Set the requirements (Sections 3 and 9); when asked, chose Cinemachine and chose to add strafe animations; reviewed and accepted the result | Compiles with no warnings; checked in play mode against the training dummy (locking on and off through the method the Tab key calls, turning to face the target, strafing around it including diagonals at walking speed, walking back, no running while locked, an attack while locked on dealing damage); separate AI correctness and quality reviews. Not yet tested: the lock breaking at range or when the target dies |
 | 1 | Small fixes | Replaced a Unity function deprecated in Unity 6.6 (`FindFirstObjectByType`) | Asked for the fix | Compiles with no warnings |
 | 1 | Project notes, Markdown copy and Section 13 | Wrote the technical notes, the Markdown conversion of this document and a draft of this section | Gave the instructions, reviewed and accepted the text | Checked for accuracy against the code and the rest of this document |
 

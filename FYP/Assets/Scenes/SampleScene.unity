@@ -835,7 +835,7 @@ Transform:
   m_GameObject: {fileID: 1177767484}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0.6, y: 0.2, z: -4.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -972,6 +972,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1561456868}
   - component: {fileID: 1561456867}
+  - component: {fileID: 1561456869}
   m_Layer: 0
   m_Name: Camera Rig
   m_TagString: Untagged
@@ -1005,9 +1006,6 @@ MonoBehaviour:
   yawSmoothTime: 0.05
   lockPitchOffset: 8
   lockSmoothTime: 0.1
-  showReticle: 1
-  reticleSize: 10
-  reticleColour: {r: 1, g: 0.85, b: 0.3, a: 0.9}
 --- !u!4 &1561456868
 Transform:
   m_ObjectHideFlags: 0
@@ -1026,6 +1024,21 @@ Transform:
   - {fileID: 1177767487}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1561456869
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1561456866}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4563295b1d3ac8d4e9fb88e3b71217fc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LockOnReticle
+  player: {fileID: 1646528641}
+  size: 10
+  colour: {r: 1, g: 0.85, b: 0.3, a: 0.9}
 --- !u!4 &1582237295 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -6874584590210671055, guid: 8b3bbccce52b2ce44b86242534d01912, type: 3}

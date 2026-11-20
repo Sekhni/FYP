@@ -12,9 +12,15 @@ using UnityEngine;
 ///    replaces the Locomotion state's 1D blend tree (driven by Speed) with a
 ///    2D one driven by MoveX / MoveZ, with each clip placed at the speed and
 ///    direction it actually travels (measured from the clips).
-/// 2. Camera: replaces ThirdPersonCamera on the Main Camera with a Cinemachine
-///    Brain, and builds a "Camera Rig" with a LockOnCamera, a pivot, a free
-///    camera and a lock-on camera.
+///    These are asset changes saved straight to disk: Ctrl+Z does not undo
+///    them (use version control).
+/// 2. Camera: puts a Cinemachine Brain on the Main Camera (removing any
+///    missing-script leftovers, e.g. the old ThirdPersonCamera), and builds a
+///    "Camera Rig" with a LockOnCamera, a LockOnReticle, a pivot, a free
+///    camera and a lock-on camera. This part can be undone.
+///
+/// The clip speeds below are the single source for the blend tree; the
+/// PlayerController tooltips and CLAUDE.md quote them.
 ///
 /// This file must stay inside a folder called "Editor".
 /// </summary>
@@ -44,16 +50,23 @@ public static class LockOnSetup
             return;
         }
 
+        // Asset changes first, in their own undo group that is then cleared
+        // (they can't be undone, and must not ride on the user's last action).
+        Undo.IncrementCurrentGroup();
+        SetUpLocomotion();
+        var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
+        if (controller != null)
+            Undo.ClearUndo(controller);
+
         Undo.IncrementCurrentGroup();
         Undo.SetCurrentGroupName("Set Up Lock-On");
         int undoGroup = Undo.GetCurrentGroup();
-
-        SetUpLocomotion();
         SetUpCamera(player);
-
         Undo.CollapseUndoOperations(undoGroup);
+
         EditorSceneManager.MarkSceneDirty(player.gameObject.scene);
-        Debug.Log("Lock-on set up. Save the scene to keep it. In Play Mode press Tab to lock on.");
+        Debug.Log("Lock-on set up. Save the scene to keep it. In Play Mode press Tab to lock on. " +
+                  "(The Animator and clip changes are saved to disk and can't be undone with Ctrl+Z.)");
     }
 
     // ------------------------------------------------------------ Animation
@@ -83,9 +96,11 @@ public static class LockOnSetup
         }
 
         if (locomotion.motion is BlendTree existing && existing.name == BlendTreeName)
+        {
+            ClearSpeedParameter(locomotion, controller);
             return;   // already done
+        }
 
-        Undo.RecordObject(locomotion, "Set Up Lock-On");
         var tree = new BlendTree
         {
             name = BlendTreeName,
@@ -112,11 +127,25 @@ public static class LockOnSetup
         Motion old = locomotion.motion;
         locomotion.motion = tree;
         locomotion.speed = 1f;
-        locomotion.speedParameterActive = false;
         if (old is BlendTree oldTree && AssetDatabase.GetAssetPath(oldTree) == ControllerPath)
             Object.DestroyImmediate(oldTree, true);
         RemoveParameter(controller, "MoveDirection");
+        ClearSpeedParameter(locomotion, controller);
 
+        EditorUtility.SetDirty(locomotion);
+        EditorUtility.SetDirty(controller);
+        AssetDatabase.SaveAssets();
+    }
+
+    // The old reverse-playback trick used MoveDirection as the state's speed
+    // multiplier; that parameter is gone, so clear the reference too.
+    private static void ClearSpeedParameter(AnimatorState locomotion, AnimatorController controller)
+    {
+        if (!locomotion.speedParameterActive && string.IsNullOrEmpty(locomotion.speedParameter))
+            return;
+        locomotion.speedParameterActive = false;
+        locomotion.speedParameter = "";
+        EditorUtility.SetDirty(locomotion);
         EditorUtility.SetDirty(controller);
         AssetDatabase.SaveAssets();
     }
@@ -183,8 +212,14 @@ public static class LockOnSetup
 
     private static void SetUpCamera(PlayerController player)
     {
-        if (Object.FindAnyObjectByType<LockOnCamera>(FindObjectsInactive.Include) != null)
-            return;   // already done
+        LockOnCamera existing = Object.FindAnyObjectByType<LockOnCamera>(FindObjectsInactive.Include);
+        if (existing != null)
+        {
+            // Rig already built; just make sure it has the reticle.
+            if (existing.GetComponent<LockOnReticle>() == null)
+                AddReticle(existing.gameObject, player, undoable: true);
+            return;
+        }
 
         Camera mainCamera = Camera.main;
         if (mainCamera == null)
@@ -193,14 +228,23 @@ public static class LockOnSetup
             return;
         }
 
-        // ---- Main Camera: the Brain replaces ThirdPersonCamera ----
-        foreach (MonoBehaviour mb in mainCamera.GetComponents<MonoBehaviour>())
-            if (mb != null && mb.GetType().Name == "ThirdPersonCamera")
-                Undo.DestroyObjectImmediate(mb);
+        // ---- Main Camera: a Brain instead of any old camera script ----
+        Undo.RegisterCompleteObjectUndo(mainCamera.gameObject, "Set Up Lock-On");
+        try
+        {
+            GameObjectUtility.RemoveMonoBehavioursWithMissingScript(mainCamera.gameObject);
+        }
+        catch (System.Exception e)
+        {
+            // e.g. the missing script comes from a prefab the camera is part of
+            Debug.LogWarning($"Set Up Lock-On: couldn't remove missing scripts from the Main Camera ({e.Message}).");
+        }
 
         CinemachineBrain brain = mainCamera.GetComponent<CinemachineBrain>();
         if (brain == null)
             brain = Undo.AddComponent<CinemachineBrain>(mainCamera.gameObject);
+        else
+            Undo.RecordObject(brain, "Set Up Lock-On");
         brain.DefaultBlend = new CinemachineBlendDefinition(CinemachineBlendDefinition.Styles.EaseInOut, 0.35f);
 
         // The cameras ignore the player's own collider when avoiding walls.
@@ -217,9 +261,12 @@ public static class LockOnSetup
         pivot.SetParent(rig.transform, false);
 
         CinemachineCamera free = CreateCamera("Free Camera", rig.transform, pivot, mainCamera,
-                                              shoulder: new Vector3(0.4f, 0f, 0f), distance: 4f, priority: 10, player.tag);
+                                              shoulder: new Vector3(0.4f, 0f, 0f), distance: 4f,
+                                              LockOnCamera.FreePriority, player.tag);
         CinemachineCamera locked = CreateCamera("Lock-On Camera", rig.transform, pivot, mainCamera,
-                                                shoulder: new Vector3(0.6f, 0.2f, 0f), distance: 4.5f, priority: 0, player.tag);
+                                                shoulder: new Vector3(0.6f, 0.2f, 0f), distance: 4.5f,
+                                                LockOnCamera.InactivePriority, player.tag);
+        AddReticle(rig, player, undoable: false);   // the rig itself is already undoable
 
         LockOnCamera lockOn = rig.AddComponent<LockOnCamera>();
         var so = new SerializedObject(lockOn);
@@ -227,6 +274,14 @@ public static class LockOnSetup
         so.FindProperty("pivot").objectReferenceValue = pivot;
         so.FindProperty("freeCamera").objectReferenceValue = free;
         so.FindProperty("lockOnCamera").objectReferenceValue = locked;
+        so.ApplyModifiedPropertiesWithoutUndo();
+    }
+
+    private static void AddReticle(GameObject host, PlayerController player, bool undoable)
+    {
+        LockOnReticle reticle = undoable ? Undo.AddComponent<LockOnReticle>(host) : host.AddComponent<LockOnReticle>();
+        var so = new SerializedObject(reticle);
+        so.FindProperty("player").objectReferenceValue = player;
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
