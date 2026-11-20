@@ -13,10 +13,18 @@ public enum CombatState
 
 /// <summary>
 /// Minimal combat state machine for Blade & Reflex.
-/// Left mouse button starts a light attack.
+/// Attacks (left mouse button, gamepad: West / Square / X):
+///   Tap  -> light attack, decided when the button is released. Light
+///           attacks chain: each one started within chainWindow seconds of
+///           the previous one ending plays the next swing (1 -> 2 -> 3 -> 1),
+///           otherwise it starts again at swing 1. (Later the guard direction
+///           will choose the swing instead; GDD section 3.)
+///   Hold -> heavy attack once held for heavyHoldTime: slower, more damage.
+/// The Animator gets the swing number in "AttackIndex" and the trigger
+/// "AttackLight" or "AttackHeavy".
 /// Hold right mouse button (gamepad: left bumper) to block. You can't attack
-/// while blocking, and rolling (PlayerController) drops the block. Three Animation Events on the
-/// attack clip move the state forward:
+/// while blocking, and rolling (PlayerController) drops the block. Three Animation Events on
+/// every attack clip move the state forward:
 ///     ActiveStart  ->  Active
 ///     ActiveEnd    ->  Recovery
 ///     AttackEnd    ->  Idle
@@ -24,24 +32,40 @@ public enum CombatState
 /// GameObject as this script (the Player root).
 ///
 /// Getting hit (needs a Health component on the same object):
-///   Hit     -> Stunned for stunTime: the HitReact animation plays, any attack
-///              in progress is cancelled, and you slide back knockbackDistance.
-///   Blocked -> the BlockImpact animation plays and you slide back a little;
-///              you keep your guard.
+///   Hit     -> Stunned for stunTime: a hit reaction plays (one of several,
+///              picked at random through "HitVariant"), any attack in
+///              progress is cancelled, and you slide back knockbackDistance.
+///   Blocked -> a block reaction plays (random, "BlockHitVariant") and you
+///              slide back a little; you keep your guard.
 ///   Dodged  -> nothing.
 ///
 /// Hits: while the state is Active, HitCalculator (same object) sweeps the
 /// blade against every HitBody's capsules. When it reports a target, that
-/// target's Health takes attackDamage. Each target can be hit once per swing.
+/// target's Health takes attackDamage (light) or heavyDamage (heavy). Each
+/// target can be hit once per swing.
 /// </summary>
 public class CombatStateMachine : MonoBehaviour
 {
     [Header("References (auto-filled if left empty)")]
     [SerializeField] private Animator animator;
 
-    [Header("Light attack hit")]
-    [Tooltip("Damage dealt when the blade touches a target (before its block or dodge is applied).")]
+    [Header("Light attacks (tap)")]
+    [Tooltip("Damage dealt when a light attack's blade touches a target (before its block or dodge is applied).")]
     [SerializeField] private float attackDamage = 20f;
+    [Tooltip("Seconds after an attack ends in which the next light attack continues the chain (swing 1 -> 2 -> 3).")]
+    [SerializeField] private float chainWindow = 0.6f;
+
+    [Header("Heavy attack (hold)")]
+    [Tooltip("Damage dealt when the heavy attack's blade touches a target.")]
+    [SerializeField] private float heavyDamage = 35f;
+    [Tooltip("Seconds the attack button must be held for a heavy attack. A shorter press is a light attack.")]
+    [SerializeField] private float heavyHoldTime = 0.25f;
+
+    [Header("Reaction variety")]
+    [Tooltip("Number of hit-reaction clips in the Animator's HitReact blend tree.")]
+    [SerializeField] private int hitVariants = 2;
+    [Tooltip("Number of block-reaction clips in the Animator's BlockImpact blend tree.")]
+    [SerializeField] private int blockHitVariants = 2;
 
     [Header("Getting hit")]
     [Tooltip("Seconds you can't move, attack, block or roll after being hit.")]
@@ -60,10 +84,22 @@ public class CombatStateMachine : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool logStateChanges = true;
 
+    /// <summary>Light swings in the chain (Animator states Attack_Light_1..3; must match AnimationVarietySetup.LightAttacks).</summary>
+    public const int LightAttackCount = 3;
+
     private static readonly int AttackLightHash = Animator.StringToHash("AttackLight");
+    private static readonly int AttackHeavyHash = Animator.StringToHash("AttackHeavy");
+    private static readonly int AttackIndexHash = Animator.StringToHash("AttackIndex");
     private static readonly int BlockingHash = Animator.StringToHash("Blocking");
     private static readonly int HitHash = Animator.StringToHash("Hit");
     private static readonly int BlockHitHash = Animator.StringToHash("BlockHit");
+    private static readonly int HitVariantHash = Animator.StringToHash("HitVariant");
+    private static readonly int BlockHitVariantHash = Animator.StringToHash("BlockHitVariant");
+
+    private int nextLightIndex;
+    private float lastAttackEndTime = float.NegativeInfinity;
+    private bool attackPressPending;
+    private float attackPressStart;
 
     private Health health;
     private CharacterController characterController;
@@ -85,6 +121,12 @@ public class CombatStateMachine : MonoBehaviour
 
     /// <summary>True while the guard is up.</summary>
     public bool IsBlocking { get; private set; }
+
+    /// <summary>True if the current (or last) attack is the heavy one.</summary>
+    public bool IsHeavyAttack { get; private set; }
+
+    /// <summary>Which light swing (0-2) the current (or last) light attack is.</summary>
+    public int CurrentLightIndex { get; private set; }
 
     public event Action<CombatState> StateChanged;
 
@@ -124,11 +166,14 @@ public class CombatStateMachine : MonoBehaviour
 
         if (State == CombatState.Idle && !IsBlocking && !dodging)
         {
-            Mouse mouse = Mouse.current;
-            if (mouse != null && mouse.leftButton.wasPressedThisFrame)
-                TryLightAttack();
+            UpdateAttackInput();
+            return;
         }
-        else if (State != CombatState.Idle)
+
+        // A press made while blocking, rolling, swinging or stunned doesn't carry over.
+        attackPressPending = false;
+
+        if (State != CombatState.Idle)
         {
             timeInState += Time.deltaTime;
 
@@ -146,6 +191,7 @@ public class CombatStateMachine : MonoBehaviour
             {
                 Debug.LogWarning($"CombatStateMachine: stuck in {State} for {failSafeSeconds}s. " +
                                  "Check the Animation Events on the attack clip. Forcing Idle.");
+                nextLightIndex = 0;   // a broken swing restarts the chain
                 SetState(CombatState.Idle);
             }
         }
@@ -169,13 +215,67 @@ public class CombatStateMachine : MonoBehaviour
             Debug.Log($"[Combat] {name} block {(blocking ? "up" : "down")}");
     }
 
+    // Tap = light attack (on release), hold = heavy attack (once held long enough).
+    private void UpdateAttackInput()
+    {
+        Mouse mouse = Mouse.current;
+        Gamepad pad = Gamepad.current;
+        bool pressed = (mouse != null && mouse.leftButton.wasPressedThisFrame)
+                    || (pad != null && pad.buttonWest.wasPressedThisFrame);
+        bool held = (mouse != null && mouse.leftButton.isPressed)
+                 || (pad != null && pad.buttonWest.isPressed);
+
+        if (pressed)
+        {
+            attackPressPending = true;
+            attackPressStart = Time.time;
+        }
+        if (!attackPressPending)
+            return;
+
+        if (!held)
+        {
+            attackPressPending = false;
+            TryLightAttack();
+        }
+        else if (Time.time - attackPressStart >= heavyHoldTime)
+        {
+            attackPressPending = false;
+            TryHeavyAttack();
+        }
+    }
+
+    /// <summary>
+    /// Start the next light swing in the chain (or swing 1 if the chain has
+    /// lapsed). Returns false if the fighter can't attack right now.
+    /// </summary>
     public bool TryLightAttack()
     {
         if (State != CombatState.Idle || IsBlocking)
             return false;
 
+        int index = Time.time - lastAttackEndTime <= chainWindow ? nextLightIndex : 0;
+        nextLightIndex = (index + 1) % LightAttackCount;
+        CurrentLightIndex = index;
+        IsHeavyAttack = false;
+
         SetState(CombatState.Windup);
+        animator.SetInteger(AttackIndexHash, index);
         animator.SetTrigger(AttackLightHash);
+        return true;
+    }
+
+    /// <summary>Start a heavy attack. Returns false if the fighter can't attack right now.</summary>
+    public bool TryHeavyAttack()
+    {
+        if (State != CombatState.Idle || IsBlocking)
+            return false;
+
+        nextLightIndex = 0;   // a heavy attack ends the light chain
+        IsHeavyAttack = true;
+
+        SetState(CombatState.Windup);
+        animator.SetTrigger(AttackHeavyHash);
         return true;
     }
 
@@ -185,14 +285,18 @@ public class CombatStateMachine : MonoBehaviour
     {
         if (result == HitResult.Hit)
         {
-            // Cancel whatever we were doing and flinch.
+            // Cancel whatever we were doing and flinch (one of the hit reactions).
             animator.ResetTrigger(AttackLightHash);
+            animator.ResetTrigger(AttackHeavyHash);
+            nextLightIndex = 0;   // being hit breaks the light chain
+            animator.SetFloat(HitVariantHash, UnityEngine.Random.Range(0, Mathf.Max(1, hitVariants)));
             animator.SetTrigger(HitHash);
             SetState(CombatState.Stunned);
             StartKnockback(attacker, knockbackDistance);
         }
         else if (result == HitResult.Blocked)
         {
+            animator.SetFloat(BlockHitVariantHash, UnityEngine.Random.Range(0, Mathf.Max(1, blockHitVariants)));
             animator.SetTrigger(BlockHitHash);
             StartKnockback(attacker, blockKnockbackDistance);
         }
@@ -231,7 +335,7 @@ public class CombatStateMachine : MonoBehaviour
     private void OnBladeHit(HitBody target, BladeHit hit)
     {
         if (target.Health != null)
-            target.Health.TakeHit(attackDamage, transform);
+            target.Health.TakeHit(IsHeavyAttack ? heavyDamage : attackDamage, transform);
     }
 
     // ---- Animation Event receivers (names must match the events exactly) ----
@@ -253,7 +357,10 @@ public class CombatStateMachine : MonoBehaviour
         // Ignore it while stunned: an attack that was interrupted by a hit can
         // still fire its last event as it blends out.
         if (State == CombatState.Windup || State == CombatState.Active || State == CombatState.Recovery)
+        {
+            lastAttackEndTime = Time.time;   // the next light attack may continue the chain
             SetState(CombatState.Idle);
+        }
     }
 
     private void SetState(CombatState next)

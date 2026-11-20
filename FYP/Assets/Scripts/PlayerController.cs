@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// Player movement and lock-on for Blade & Reflex.
@@ -32,7 +33,8 @@ using UnityEngine.InputSystem;
 /// - No root motion is used anywhere. Rolls and attacks are moved by this
 ///   script: each frame it reads how far through its animation the player is
 ///   (Animator normalizedTime, which already includes the state's playback
-///   speed) and moves the matching share of rollDistance / attackDistance.
+///   speed) and moves the matching share of rollDistance or the attack
+///   distance (lightAttackDistance or heavyAttackDistance).
 ///   So the movement always lasts exactly as long as the animation plays,
 ///   even if you change the clip or its speed. The progress curves describe
 ///   how the distance is spread over the animation (measured from the clips).
@@ -52,9 +54,12 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float gravity = -20f;
 
     [Header("Attacks")]
-    [Tooltip("Metres the light attack steps forward over the whole swing. 0 = attack in place.")]
-    [SerializeField] private float attackDistance = 1f;
-    [Tooltip("How the attack distance is spread over the swing (x = animation progress 0-1, y = share of distance 0-1). Default is measured from the Attack_Light clip.")]
+    [Tooltip("Metres each light swing steps forward (it leaves the swing at ~0.7 of the clip, so about 93% of this is covered). The light clips swing in place, so keep this small. 0 = attack in place.")]
+    [SerializeField] private float lightAttackDistance = 0.3f;
+    [Tooltip("Metres the heavy attack lunges forward over the whole swing. 0 = attack in place.")]
+    [FormerlySerializedAs("attackDistance")]
+    [SerializeField] private float heavyAttackDistance = 1f;
+    [Tooltip("How the attack distance is spread over the swing (x = animation progress 0-1, y = share of distance 0-1). Shared by the light and heavy attacks; the default is measured from the heavy attack clip.")]
     [SerializeField] private AnimationCurve attackProgress = new AnimationCurve(
         new Keyframe(0f, 0f), new Keyframe(0.23f, 0.17f), new Keyframe(0.40f, 0.51f),
         new Keyframe(0.52f, 0.68f), new Keyframe(0.72f, 0.94f), new Keyframe(1f, 1f));
@@ -96,6 +101,14 @@ public class PlayerController : MonoBehaviour
     [Tooltip("Degrees per second the player turns to keep facing the target.")]
     [SerializeField] private float lockTurnSpeed = 540f;
 
+    [Header("Idle variety")]
+    [Tooltip("Number of idle clips in the Animator's 'Idle Variants' blend tree.")]
+    [SerializeField] private int idleVariants = 4;
+    [Tooltip("Shortest and longest time, in seconds, standing still before the idle changes.")]
+    [SerializeField] private Vector2 idleChangeInterval = new Vector2(6f, 12f);
+    [Tooltip("Seconds the cross-fade to the next idle takes (roughly).")]
+    [SerializeField] private float idleBlendTime = 0.6f;
+
     [Header("Input")]
     [Tooltip("Gamepad stick values below this are ignored.")]
     [SerializeField] private float stickDeadZone = 0.15f;
@@ -107,6 +120,10 @@ public class PlayerController : MonoBehaviour
     private static readonly int MoveXHash = Animator.StringToHash("MoveX");
     private static readonly int MoveZHash = Animator.StringToHash("MoveZ");
     private static readonly int DodgeHash = Animator.StringToHash("Dodge");
+    private static readonly int IdleVariantHash = Animator.StringToHash("IdleVariant");
+
+    private int idleVariant;
+    private float idleTimer;
 
     private CharacterController controller;
     private CombatStateMachine combat;
@@ -125,7 +142,7 @@ public class PlayerController : MonoBehaviour
     private const float DegreesPerMetre = 2f;
 
     private const string RollTag = "Dodge";     // tag on the Dodge state in PlayerAnimator
-    private const string AttackTag = "Attack";  // tag on the Attack_Light state
+    private const string AttackTag = "Attack";  // tag on every attack state (Attack_Light_1..3, Attack_Heavy)
 
     /// <summary>Current horizontal speed in metres per second.</summary>
     public float CurrentSpeed => horizontalVelocity.magnitude;
@@ -260,7 +277,33 @@ public class PlayerController : MonoBehaviour
             animator.SetFloat(SpeedHash, horizontalVelocity.magnitude, 0.05f, Time.deltaTime);
             animator.SetFloat(MoveXHash, local.x, 0.05f, Time.deltaTime);
             animator.SetFloat(MoveZHash, local.z, 0.05f, Time.deltaTime);
+            UpdateIdleVariant();
         }
+    }
+
+    // While standing still, every few seconds drift to a neighbouring idle
+    // clip (the 1D 'Idle Variants' blend tree cross-fades between neighbours).
+    private void UpdateIdleVariant()
+    {
+        bool standingStill = horizontalVelocity.sqrMagnitude < 0.01f && !IsAttacking && !IsDodging && !IsBlocking;
+        if (standingStill && idleVariants > 1)
+        {
+            idleTimer -= Time.deltaTime;
+            if (idleTimer <= 0f)
+            {
+                int step = UnityEngine.Random.value < 0.5f ? -1 : 1;
+                if (idleVariant + step < 0 || idleVariant + step >= idleVariants)
+                    step = -step;
+                idleVariant += step;
+                idleTimer = UnityEngine.Random.Range(idleChangeInterval.x, idleChangeInterval.y);
+            }
+        }
+        else
+        {
+            idleTimer = UnityEngine.Random.Range(idleChangeInterval.x, idleChangeInterval.y);
+        }
+
+        animator.SetFloat(IdleVariantHash, idleVariant, idleBlendTime * 0.5f, Time.deltaTime);
     }
 
     // ---------------------------------------------------------------- Lock-on
@@ -390,13 +433,20 @@ public class PlayerController : MonoBehaviour
 
     private void UpdateAttackStep()
     {
+        float attackDistance = combat != null && !combat.IsHeavyAttack ? lightAttackDistance : heavyAttackDistance;
         if (!IsAttacking || attackDistance <= 0f
-            || !TryGetAnimProgress(AttackTag, out float t, out _))
+            || !TryGetAnimProgress(AttackTag, out float t, out bool leaving))
         {
             attackLastTime = 0f;
             attackLastProgress = 0f;
             return;
         }
+
+        // The previous swing is still blending out and the new one hasn't
+        // started in the Animator yet (a fast chained tap): don't move on the
+        // old swing's progress, or the player would jump forward.
+        if (leaving)
+            return;
 
         // A new swing started (chained attack): measure from zero again.
         if (t < attackLastTime)
