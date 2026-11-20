@@ -124,6 +124,7 @@ public class PlayerController : MonoBehaviour
 
     private int idleVariant;
     private float idleTimer;
+    private int cursorLockedFrame = -1;
 
     private CharacterController controller;
     private CombatStateMachine combat;
@@ -160,6 +161,16 @@ public class PlayerController : MonoBehaviour
     public Vector3 LockPoint => LockTarget != null
         ? LockTarget.transform.position + Vector3.up * lockPointHeight
         : transform.position;
+
+    /// <summary>
+    /// True if a left click this frame would only take back the mouse (the
+    /// cursor is free, or was locked by a click this frame), so it shouldn't
+    /// also attack. Valid whichever of this script and CombatStateMachine
+    /// updates first.
+    /// </summary>
+    public bool IsClickForCursor =>
+        lockCursor && enabled
+        && (Cursor.lockState != CursorLockMode.Locked || cursorLockedFrame == Time.frameCount);
 
     /// <summary>Raised when the lock-on target changes (null = lock released).</summary>
     public event Action<HitBody> LockTargetChanged;
@@ -578,10 +589,23 @@ public class PlayerController : MonoBehaviour
         Mouse mouse = Mouse.current;
 
         if (kb != null && kb.escapeKey.wasPressedThisFrame)
+        {
             SetCursorLocked(false);
+        }
         else if (mouse != null && mouse.leftButton.wasPressedThisFrame
                  && Cursor.lockState != CursorLockMode.Locked)
+        {
             SetCursorLocked(true);
+            cursorLockedFrame = Time.frameCount;
+        }
+    }
+
+    // Clicking back into a built game's window after Alt-Tab is also only
+    // for taking back the mouse.
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (hasFocus)
+            cursorLockedFrame = Time.frameCount;
     }
 
     private static void SetCursorLocked(bool locked)

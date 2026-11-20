@@ -220,7 +220,9 @@ public class CombatStateMachine : MonoBehaviour
     {
         Mouse mouse = Mouse.current;
         Gamepad pad = Gamepad.current;
-        bool pressed = (mouse != null && mouse.leftButton.wasPressedThisFrame)
+        // A click that only takes back the mouse cursor is not an attack.
+        bool clickForCursor = mover != null && mover.IsClickForCursor;
+        bool pressed = (mouse != null && mouse.leftButton.wasPressedThisFrame && !clickForCursor)
                     || (pad != null && pad.buttonWest.wasPressedThisFrame);
         bool held = (mouse != null && mouse.leftButton.isPressed)
                  || (pad != null && pad.buttonWest.isPressed);
